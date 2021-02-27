@@ -6,7 +6,7 @@ if [ "${KEY_ID}" = "" ]; then
   export KEY_ID=`gpg --list-keys | awk '$1 == "pub" {getline;print $1}' | head -n 1`
 fi
 
-if [ ! -f "${HOME}/.password-store/" ]; then
+if [ ! -d "${HOME}/.password-store/" ]; then
   echo "SEED: Init password store"
   pass init "${KEY_ID}"
 fi
@@ -14,7 +14,8 @@ fi
 export PREF_PATH="${HOME}/.config/protonmail/bridge"
 if [ ! -f "${PREF_PATH}/prefs.json" ]; then
   echo "Install preferences template"
-  cp prefs.json "${PREF_PATH}"
+  mkdir -p "${PREF_PATH}"
+  cp prefs.json "${PREF_PATH}/"
 fi
 
 proton-bridge "$@"
