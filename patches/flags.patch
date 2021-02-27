@@ -1,0 +1,179 @@
+diff --git a/internal/imap/mailbox.go b/internal/imap/mailbox.go
+index 8dc09cc..1d85b19 100644
+--- a/internal/imap/mailbox.go
++++ b/internal/imap/mailbox.go
+@@ -25,6 +25,8 @@ import (
+ 	"github.com/ProtonMail/proton-bridge/pkg/pmapi"
+ 	"github.com/emersion/go-imap"
+ 	"github.com/sirupsen/logrus"
++
++	"github.com/ProtonMail/proton-bridge/internal/store"
+ )
+ 
+ type imapMailbox struct {
+@@ -148,6 +150,14 @@ func (im *imapMailbox) Status(items []imap.StatusItem) (*imap.MailboxStatus, err
+ 	}
+ 	status.PermanentFlags = append([]string{}, status.Flags...)
+ 
++	for _, storeMailbox := range im.storeAddress.ListMailboxes() {
++		if storeMailbox.IsFolder() || storeMailbox.IsSystem() {
++			continue
++		}
++		labelName := strings.TrimPrefix(storeMailbox.Name(), store.UserLabelsPrefix)
++		status.PermanentFlags = append(status.PermanentFlags, labelName)
++	}
++
+ 	dbTotal, dbUnread, dbUnreadSeqNum, err := im.storeMailbox.GetCounts()
+ 	l.WithFields(logrus.Fields{
+ 		"total":        dbTotal,
+diff --git a/internal/imap/mailbox_message.go b/internal/imap/mailbox_message.go
+index 84793d2..8ffc320 100644
+--- a/internal/imap/mailbox_message.go
++++ b/internal/imap/mailbox_message.go
+@@ -37,6 +37,9 @@ import (
+ 	"github.com/emersion/go-imap"
+ 	"github.com/hashicorp/go-multierror"
+ 	"github.com/pkg/errors"
++
++	"github.com/ProtonMail/proton-bridge/internal/store"
++
+ 	openpgperrors "golang.org/x/crypto/openpgp/errors"
+ )
+ 
+@@ -139,6 +142,17 @@ func (im *imapMailbox) createMessage(flags []string, date time.Time, body imap.L
+ 	}
+ 
+ 	message.ParseFlags(m, flags)
++
++	for _, f := range flags {
++		targetMailbox, err := im.storeAddress.GetMailbox(store.UserLabelsPrefix + f)
++		if err != nil {
++			// Ignore Labels that do not exists on the server when importing
++			// ? Maybe create labels on the fly? Could be messy.
++			continue
++		}
++		m.LabelIDs = append(m.LabelIDs, targetMailbox.LabelID())
++	}
++
+ 	if !date.IsZero() {
+ 		m.Time = date.Unix()
+ 	}
+@@ -252,6 +266,15 @@ func (im *imapMailbox) getMessage(storeMessage storeMessageProvider, items []ima
+ 			}
+ 		case imap.FetchFlags:
+ 			msg.Flags = message.GetFlags(m)
++			for _, storeMailbox := range im.storeAddress.ListMailboxes() {
++				if storeMailbox.IsFolder() || storeMailbox.IsSystem() {
++					continue
++				}
++				if m.HasLabelID(storeMailbox.LabelID()) {
++					labelName := strings.TrimPrefix(storeMailbox.Name(), store.UserLabelsPrefix)
++					msg.Flags = append(msg.Flags, labelName)
++				}
++			}
+ 			if storeMessage.IsMarkedDeleted() {
+ 				msg.Flags = append(msg.Flags, imap.DeletedFlag)
+ 			}
+@@ -419,6 +442,9 @@ func (im *imapMailbox) getMessageBodySection(storeMessage storeMessageProvider,
+ 		case section.Specifier == imap.EntireSpecifier && len(section.Path) == 0:
+ 			//  An empty section specification refers to the entire message, including the header.
+ 			response, err = structure.GetSection(bodyReader, section.Path)
++		case section.Specifier == imap.EntireSpecifier && len(section.Path) == 1 && section.Path[0] == 1 && len(*structure) == 1:
++			// Fetching section 1 of a non-multipart message with no specifier should return the content without the header.
++			response, err = structure.GetSection(bodyReader, []int{})
+ 		case section.Specifier == imap.TextSpecifier || (section.Specifier == imap.EntireSpecifier && len(section.Path) != 0):
+ 			// The TEXT specifier refers to the content of the message (or section), omitting the [RFC-2822] header.
+ 			// Non-empty section with no specifier (imap.EntireSpecifier) refers to section content without header.
+diff --git a/internal/imap/mailbox_messages.go b/internal/imap/mailbox_messages.go
+index b77ebf4..50e575d 100644
+--- a/internal/imap/mailbox_messages.go
++++ b/internal/imap/mailbox_messages.go
+@@ -31,6 +31,8 @@ import (
+ 	"github.com/ProtonMail/proton-bridge/pkg/pmapi"
+ 	"github.com/emersion/go-imap"
+ 	"github.com/sirupsen/logrus"
++
++	"github.com/ProtonMail/proton-bridge/internal/store"
+ )
+ 
+ // UpdateMessagesFlags alters flags for the specified message(s).
+@@ -76,6 +78,13 @@ func (im *imapMailbox) setFlags(messageIDs, flags []string) error { //nolint
+ 	deleted := false
+ 	spam := false
+ 
++	for _, storeMailbox := range im.storeAddress.ListMailboxes() {
++		if storeMailbox.IsFolder() || storeMailbox.IsSystem() {
++			continue
++		}
++		storeMailbox.UnlabelMessages(messageIDs)
++	}
++
+ 	for _, f := range flags {
+ 		switch f {
+ 		case imap.SeenFlag:
+@@ -86,6 +95,14 @@ func (im *imapMailbox) setFlags(messageIDs, flags []string) error { //nolint
+ 			deleted = true
+ 		case message.AppleMailJunkFlag, message.ThunderbirdJunkFlag:
+ 			spam = true
++		default:
++			targetMailbox, err := im.storeAddress.GetMailbox(store.UserLabelsPrefix + f)
++			if err != nil {
++				return err
++			}
++			if err := targetMailbox.LabelMessages(messageIDs); err != nil {
++				return err
++			}
+ 		}
+ 	}
+ 
+@@ -173,7 +190,7 @@ func (im *imapMailbox) addOrRemoveFlags(operation imap.FlagsOp, messageIDs, flag
+ 					return err
+ 				}
+ 			}
+-		case imap.AnsweredFlag, imap.DraftFlag, imap.RecentFlag:
++		case imap.AnsweredFlag, imap.DraftFlag, imap.RecentFlag, message.ThunderbirdNonJunkFlag:
+ 			// Not supported.
+ 		case message.AppleMailJunkFlag, message.ThunderbirdJunkFlag:
+ 			storeMailbox, err := im.storeAddress.GetMailbox("Spam")
+@@ -194,6 +211,21 @@ func (im *imapMailbox) addOrRemoveFlags(operation imap.FlagsOp, messageIDs, flag
+ 					return err
+ 				}
+ 			}
++		default:
++			mailbox, err := im.storeAddress.GetMailbox(store.UserLabelsPrefix + f)
++			if err != nil {
++				return err
++			}
++			switch operation {
++			case imap.AddFlags:
++				if err := mailbox.LabelMessages(messageIDs); err != nil {
++					return err
++				}
++			case imap.RemoveFlags:
++				if err := mailbox.UnlabelMessages(messageIDs); err != nil {
++					return err
++				}
++			}
+ 		}
+ 	}
+ 
+diff --git a/internal/imap/user.go b/internal/imap/user.go
+index 79d0d1f..d5a3a20 100644
+--- a/internal/imap/user.go
++++ b/internal/imap/user.go
+@@ -135,11 +135,14 @@ func (iu *imapUser) ListMailboxes(showOnlySubcribed bool) ([]goIMAPBackend.Mailb
+ 		if showOnlySubcribed && !iu.isSubscribed(storeMailbox.LabelID()) {
+ 			continue
+ 		}
++		if !storeMailbox.IsFolder() && !storeMailbox.IsSystem() {
++			continue
++		}
+ 		mailbox := newIMAPMailbox(iu.panicHandler, iu, storeMailbox)
+ 		mailboxes = append(mailboxes, mailbox)
+ 	}
+ 
+-	mailboxes = append(mailboxes, newLabelsRootMailbox())
++	//mailboxes = append(mailboxes, newLabelsRootMailbox())
+ 	mailboxes = append(mailboxes, newFoldersRootMailbox())
+ 
+ 	log.WithField("mailboxes", mailboxes).Trace("Listing mailboxes")
