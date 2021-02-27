@@ -11,12 +11,15 @@ WORKDIR /work
 CMD ["/bin/bash"]
 
 FROM build-env AS builder
-COPY upstream .
+COPY . .
 RUN make build-nogui
 
 FROM common
-RUN apt-get install -y libsecret-1-0
+RUN apt-get -y update && apt-get install -y libsecret-1-0 && useradd -rm -d /home/bridge -s /bin/bash -u 1001 bridge
+USER bridge
+VOLUME /home/bridge
+WORKDIR /app
 COPY --from=builder /work/proton-bridge /bin/proton-bridge
-VOLUME /root
-ENTRYPOINT ["proton-bridge"] 
+COPY ./seed /app
+ENTRYPOINT ["/app/entrypoint.sh"] 
 CMD ["--noninteractive", "--log-level", "info"]

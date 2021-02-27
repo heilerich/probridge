@@ -1,0 +1,19 @@
+{
+        "allow_proxy": "true",
+        "autostart": "true",
+        "autoupdate": "false",
+        "cookies": "",
+        "first_time_start": "false",
+        "first_time_start_gui": "true",
+        "last_heartbeat": "",
+        "last_used_version": "",
+        "next_heartbeat": "",
+        "preferred_keychain": "pass-app",
+        "report_outgoing_email_without_encryption": "false",
+        "rollout": "",
+        "update_channel": "stable",
+        "user_port_api": "1042",
+        "user_port_imap": "1143",
+        "user_port_smtp": "1025",
+        "user_ssl_smtp": "true"
+}
