@@ -15,7 +15,7 @@ COPY . .
 RUN make build-nogui
 
 FROM common
-RUN apt-get -y update && apt-get install -y libsecret-1-0 && useradd -rm -d /home/bridge -s /bin/bash -u 1001 bridge
+RUN apt-get -y update && apt-get install -y libsecret-1-0 && adduser --system --home /home/bridge --shell /bin/bash --uid 1001 --group bridge
 USER bridge
 VOLUME /home/bridge
 WORKDIR /app
