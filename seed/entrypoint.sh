@@ -8,6 +8,6 @@ useradd --shell /bin/bash -u $USER_ID -g bridge -o -c "" -m bridge
 export HOME=/home/bridge
 
 chown bridge:bridge -R /home/bridge
-chmod g=0= -R /home/bridge
+chmod og= -R /home/bridge
 
 exec gosu bridge:bridge ./bootstrap.sh "$@"
