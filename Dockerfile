@@ -1,6 +1,6 @@
 FROM ubuntu:focal AS common
 ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get -y update && apt-get -y upgrade && apt-get -y install pass gosu && rm -rf /var/lib/apt/lists/*; \
+RUN apt-get -y update && apt-get -y upgrade && apt-get -y install pass gosu && \
     # verify that the binary works
 	gosu nobody true
 
@@ -17,7 +17,7 @@ COPY . .
 RUN make build-nogui
 
 FROM common
-RUN apt-get -y update && apt-get install -y libsecret-1-0
+RUN apt-get -y update && apt-get install -y libsecret-1-0 && rm -rf /var/lib/apt/lists/*
 VOLUME /home/bridge
 WORKDIR /app
 COPY --from=builder /work/proton-bridge /bin/proton-bridge
