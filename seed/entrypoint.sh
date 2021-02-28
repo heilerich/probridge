@@ -10,4 +10,4 @@ export HOME=/home/bridge
 chown bridge:bridge -R /home/bridge
 chmod g=0= -R /home/bridge
 
-su-exec bridge:bridge ./bootstrap.sh "$@"
+exec gosu bridge:bridge ./bootstrap.sh "$@"
