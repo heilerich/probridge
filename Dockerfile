@@ -17,7 +17,7 @@ COPY . .
 RUN make build-nogui
 
 FROM common
-RUN apt-get -y update && apt-get install -y libsecret-1-0 && rm -rf /var/lib/apt/lists/*
+RUN apt-get -y update && apt-get install -y libsecret-1-0 && rm -rf /var/lib/apt/lists/* && export PROTONMAIL_ENV=dev
 VOLUME /home/bridge
 WORKDIR /app
 COPY --from=builder /work/proton-bridge /bin/proton-bridge
