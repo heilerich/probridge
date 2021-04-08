@@ -17,4 +17,6 @@ if [ ! -f "${PREF_PATH}/prefs.json" ]; then
   cp prefs.json "${PREF_PATH}/"
 fi
 
+exec socat TCP-LISTEN:${IMAP_PORT},fork,bind=$(hostname -I) TCP:127.0.0.1:${IMAP_PORT} &
+exec socat TCP-LISTEN:${SMTP_PORT},fork,bind=$(hostname -I) TCP:127.0.0.1:${SMTP_PORT} &
 exec proton-bridge "$@"
