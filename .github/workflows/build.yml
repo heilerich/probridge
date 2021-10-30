@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 env:
-  go_version: '1.15.6'
+  go_version: '1.15.15'
 
 jobs:
   build_docker:
