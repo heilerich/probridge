@@ -25,7 +25,7 @@ jobs:
           GO_VERSION: ${{ env.go_version }}
         run: |
           envsubst '${GO_VERSION}' < Dockerfile > upstream/Dockerfile
-          pushd upstream && git apply ../patches/*.patch && popd
+          pushd upstream && git apply ../patches/*.patch; popd
           cp -rv ./seed upstream/
 
       - name: Docker meta
